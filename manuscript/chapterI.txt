@@ -40,7 +40,7 @@ todo!()
 
 todo!()
 
-### The newcomer (Zff)
+### The newcomer (Zff) //TODO: a mini section for PoC Zffv1?
 
 The forensic file formats presented above have a number of similarities - also with the new file format zff presented here.
 
@@ -111,6 +111,43 @@ The appropriate terminology needed to understand how Zff works:
 
 - **chunk**: The input data is read in parts and also stored as such "parts". These "parts" are called "chunks" and can be stored compressed and/or encrypted, if necessary. The entire process is called "chunking" and will be discussed in detail in a later subsection.
 
+## The file structure
+
+### Identify a zff container
+
+As well as other file (types), zff uses also a file header signature to identify the file as a zff container. The header signature always starts at Offset 0 with 0x7A66666D (or "zffm", read as bigendian ;) ).
+
+### The format layout
+
+In general, Zff contains multiple sections:
+- Header. A header contains always metainformation of a specific section, which is "not alterable" during or after the dump process. An example for a "header" could be the "segment header" which contains a unique segment number. The number of a specific segment will not be changed during the dump process (and will not be changed after the dump process), so you will find a information like this in a header.
+- Footer. A footer contains metainformation of a specific section, which is altered or generated during or after the dump process and cannot be stored in a "header". An example for a "footer" could be the "segment footer" which contains the "segment size" (or length of the segment). The size of the segment is unknown until the dump process is complete and has to be stored in the segment footer, which is stored at the end of a segment.
+- Chunks. The input data stream is read in chunks (depending on the used parameters) and stored accordingly in this way.
+In Zff these slices are called chunks. Each chunk has a corresponding chunk header - and a so-called "data area" in which the fragmented data (possibly compressed and encrypted) is stored.
+
+Each header and each footer in zff starts with a individual signature to identify the appropriate header or footer, followed by the header (or footer) length and a header (or footer) version.
+
+#### The main header
+
+A zff container always starts with an initial "main header".
+The main header is structured as follows:
+
+| Name              | Length in bytes | Data type  |
+|-------------------|-----------------|------------|
+| Identifier        | 4               | 0x7A66666D |
+| Header length     | 8               | uint64     |
+| Header version    | 1               | uint8      |
+| Chunk size        | 1               | uint8      |
+| Segment size      | 8               | uint64     |
+| Unique identifier | 8               | int64      |
+
+__Identifier__: The identifier for the main header is 0x7A66666D or, read as string "zffm".
+__Header length__: The length of the header in bytes, beginning with the number of magic bytes. The length of the main header is a fixed value (while it not contains any variable content) of 30 bytes.
+__Header version__: The current version of the zff main header is 2 (while version 1 was available as a proof of concept, but should not be used in production).
+__Chunk size__: This is the default chunk size for the data. This value is used as a bit shift. E.g. is the value 15, you can calculate 1«15 or 2^15 = 32768 bytes. This value represents the size of the data that is read at once and stored in a chunk - the size of the compressed "real" chunk may differ and is stored in the chunk header.
+__Segment size__: The "target" size for each segment (including all headers and footers). If the value is 0, then the target segment size is 18446744073709551615 (or 2^64 ;) ) bytes. However, this is only an orientation value. The real segment sizes are listed in the individual segment headers and may differ from this. The correct use of this field is especially important for asyncronous programs or parallel dumps - but only during the dump process.
+__Unique identifier__: A unique identifier, to distinguish individual segments of different zff containers. This identifier can be found in each segment header with an appropriate segmentation.
+In practice, if you only work with files, this is of course also possible by naming the files differently (container1.z01, container1.z02, container2.z01, container2.z02, ...) - however, it makes sense to have a unique identifier within the container - either because of possible fault tolerances or because you do not want to work with files but with other data structures.
 
 ## References
 
